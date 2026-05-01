@@ -4,6 +4,12 @@ import "./globals.css";
 export const metadata: Metadata = {
   title: "Mobile Dev Control",
   description: "在手机上控制电脑终端",
+  manifest: "/manifest.json",
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "black-translucent",
+    title: "MDC",
+  },
 };
 
 export const viewport: Viewport = {

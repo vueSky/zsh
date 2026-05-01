@@ -1,8 +1,12 @@
 "use client";
 
-import { useCallback, useState } from "react";
-import TerminalPane, { ConnState } from "./TerminalPane";
+import { useCallback, useRef, useState } from "react";
+import TerminalPane, { ConnState, TerminalPaneHandle } from "./TerminalPane";
 import AiPanel from "./AiPanel";
+import DirShortcuts from "./DirShortcuts";
+import KeyBar from "./KeyBar";
+import MobileInput from "./MobileInput";
+import { logout, openApp } from "./api";
 
 interface Tab {
   id: string;
@@ -27,7 +31,11 @@ function makeId() {
   return `t_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`;
 }
 
-export default function Workspace() {
+interface WorkspaceProps {
+  onUnauthorized?: () => void;
+}
+
+export default function Workspace({ onUnauthorized }: WorkspaceProps) {
   const [tabs, setTabs] = useState<Tab[]>(() => [
     { id: makeId(), conn: "connecting" },
   ]);
@@ -68,6 +76,21 @@ export default function Workspace() {
   );
 
   const activeTab = tabs.find((t) => t.id === activeId) ?? tabs[0]!;
+
+  // 持有每个 tab 对应 TerminalPane 的命令注入句柄
+  const termRefs = useRef<Map<string, TerminalPaneHandle>>(new Map());
+  const setTermRef = useCallback(
+    (tabId: string) => (handle: TerminalPaneHandle | null) => {
+      if (handle) termRefs.current.set(tabId, handle);
+      else termRefs.current.delete(tabId);
+    },
+    [],
+  );
+
+  // 向当前激活的终端注入文本
+  const sendToActive = useCallback((text: string) => {
+    termRefs.current.get(activeId)?.sendInput(text);
+  }, [activeId]);
 
   return (
     <div className="app">
@@ -135,12 +158,31 @@ export default function Workspace() {
             <span className="status-text">{STATUS_TEXT[activeTab.conn]}</span>
           </span>
           <button
+            className="codex-btn"
+            onClick={() => openApp("codex")}
+            aria-label="打开 Codex"
+            title="打开 Codex"
+          >
+            <span className="codex-label">Codex</span>
+          </button>
+          <button
             className="ai-btn"
             onClick={() => setAiOpen(true)}
             aria-label="打开 Claude 任务面板"
           >
             <span className="ai-emoji">🤖</span>
             <span className="ai-label">Claude</span>
+          </button>
+          <button
+            className="logout-btn"
+            onClick={async () => {
+              await logout();
+              onUnauthorized?.();
+            }}
+            aria-label="退出登录"
+            title="退出登录"
+          >
+            ⏻
           </button>
         </div>
       </header>
@@ -156,8 +198,10 @@ export default function Workspace() {
                 style={{ display: isActive ? "flex" : "none" }}
               >
                 <TerminalPane
+                  ref={setTermRef(t.id)}
                   active={isActive}
                   onConnChange={(c) => handleConnChange(t.id, c)}
+                  onUnauthorized={onUnauthorized}
                 />
               </div>
             );
@@ -165,7 +209,17 @@ export default function Workspace() {
         </div>
       </main>
 
-      <AiPanel open={aiOpen} onClose={() => setAiOpen(false)} />
+      <KeyBar onSend={sendToActive} />
+
+      <MobileInput onSend={sendToActive} />
+
+      <DirShortcuts onNavigate={sendToActive} />
+
+      <AiPanel
+        open={aiOpen}
+        onClose={() => setAiOpen(false)}
+        onInjectToTerminal={sendToActive}
+      />
 
       <style jsx>{`
         .app {
@@ -358,6 +412,32 @@ export default function Workspace() {
           color: rgba(214, 222, 235, 0.8);
         }
 
+        .codex-btn {
+          appearance: none;
+          border: 1px solid rgba(255, 165, 0, 0.35);
+          color: #ffc97a;
+          background: rgba(255, 140, 0, 0.1);
+          font-weight: 600;
+          font-size: 12.5px;
+          padding: 7px 12px;
+          border-radius: 999px;
+          cursor: pointer;
+          display: inline-flex;
+          align-items: center;
+          gap: 4px;
+          transition:
+            background 0.15s ease,
+            box-shadow 0.2s ease,
+            transform 0.15s ease;
+        }
+        .codex-btn:hover {
+          background: rgba(255, 140, 0, 0.2);
+          box-shadow: 0 4px 14px rgba(255, 140, 0, 0.25);
+        }
+        .codex-btn:active {
+          transform: scale(0.96);
+        }
+
         .ai-btn {
           appearance: none;
           border: 0;
@@ -382,6 +462,27 @@ export default function Workspace() {
         }
         .ai-btn:active {
           transform: scale(0.96);
+        }
+
+        .logout-btn {
+          appearance: none;
+          background: rgba(255, 255, 255, 0.04);
+          border: 1px solid rgba(255, 255, 255, 0.1);
+          color: rgba(214, 222, 235, 0.6);
+          width: 30px;
+          height: 30px;
+          border-radius: 8px;
+          font-size: 15px;
+          cursor: pointer;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          transition: background 0.15s ease, color 0.15s ease;
+        }
+        .logout-btn:hover {
+          background: rgba(239, 68, 68, 0.12);
+          border-color: rgba(239, 68, 68, 0.3);
+          color: #ef4444;
         }
 
         .term-wrap {
@@ -430,6 +531,9 @@ export default function Workspace() {
             font-size: 12px;
           }
           .ai-label {
+            display: none;
+          }
+          .codex-label {
             display: none;
           }
           .tab {

@@ -1,1 +1,1 @@
-self.__REACT_LOADABLE_MANIFEST="{}"
+self.__REACT_LOADABLE_MANIFEST="{\"app/page.tsx -> ../components/Workspace\":{\"id\":\"app/page.tsx -> ../components/Workspace\",\"files\":[\"static/css/_app-pages-browser_components_Workspace_tsx.css\",\"static/chunks/_app-pages-browser_components_Workspace_tsx.js\"]}}"
